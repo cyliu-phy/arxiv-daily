@@ -59,15 +59,17 @@ export function ArticleCard({ article }: Props) {
 
   const runLlm = async (instruction: string) => {
     if (streaming) return;
+    // Unique ID scopes all events to this specific request
+    const requestId = `${article.id}-${instruction}-${Date.now()}`;
     setStreaming({ instruction, text: "" });
     // un-hide this slot so the user sees the incoming stream
     setHidden((prev) => { const next = new Set(prev); next.delete(instruction); return next; });
 
-    const unToken = await onLlmToken((tok) =>
+    const unToken = await onLlmToken(requestId, (tok) =>
       setStreaming((s) => s ? { ...s, text: s.text + tok } : null)
     );
     const cleanup = () => { unToken(); unDone(); unErr(); };
-    const unDone = await onLlmDone(async (fullText) => {
+    const unDone = await onLlmDone(requestId, async (fullText) => {
       cleanup();
       try {
         await saveLlmOutput(article.id, instruction, fullText);
@@ -76,14 +78,14 @@ export function ArticleCard({ article }: Props) {
       } catch { /* non-fatal */ }
       setStreaming(null);
     });
-    const unErr = await onLlmError((msg) => {
+    const unErr = await onLlmError(requestId, (msg) => {
       toast.error(msg);
       cleanup();
       setStreaming(null);
     });
 
     try {
-      await llmSummarize(article.abstract_text, instruction);
+      await llmSummarize(article.abstract_text, instruction, requestId);
     } catch {
       setStreaming(null);
     }

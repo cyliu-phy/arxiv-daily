@@ -62,6 +62,7 @@ pub fn run() {
             commands::llm::get_llm_outputs,
             commands::llm::save_llm_output,
             commands::viewer::open_viewer,
+            commands::viewer::navigate_content,
             commands::viewer::pop_viewer_queue,
             commands::viewer::check_html_available,
         ])

@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "viewer",
-  "description": "Capabilities for the shared paper viewer window",
-  "windows": ["arxiv-viewer"],
+  "description": "Capabilities for the viewer tab-bar webview",
+  "windows": ["viewer-tabs"],
   "permissions": [
     "core:default"
   ]

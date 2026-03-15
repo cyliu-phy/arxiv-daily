@@ -4,6 +4,15 @@ use crate::db::get_setting;
 use serde_json::json;
 use tauri::Emitter;
 
+/// Payload for all three LLM streaming events.
+/// Including a request id lets multiple concurrent translations coexist
+/// without one card's listeners firing for another card's stream.
+#[derive(Clone, serde::Serialize)]
+struct LlmEvent {
+    id: String,
+    text: String,
+}
+
 /// Return all cached LLM outputs for an article.
 #[tauri::command]
 pub fn get_llm_outputs(
@@ -67,6 +76,7 @@ pub async fn llm_summarize(
     http: tauri::State<'_, reqwest::Client>,
     abstract_text: String,
     instruction: String, // e.g. "summarize" | "translate to Chinese"
+    request_id: String,  // unique per call; listeners filter on this
 ) -> Result<(), String> {
     let (endpoint, api_key, model) = {
         let conn = state.0.lock().map_err(|e| e.to_string())?;
@@ -79,8 +89,9 @@ pub async fn llm_summarize(
     };
 
     if endpoint.is_empty() || api_key.is_empty() {
-        let _ = app.emit("llm_error", "LLM API not configured. Please add endpoint and API key in Settings.");
-        return Err("LLM API not configured".to_string());
+        let msg = "LLM API not configured. Please add endpoint and API key in Settings.";
+        let _ = app.emit("llm_error", LlmEvent { id: request_id.clone(), text: msg.to_string() });
+        return Err(msg.to_string());
     }
 
     let system_prompt = match instruction.as_str() {
@@ -131,7 +142,7 @@ pub async fn llm_summarize(
                 .await;
 
             match resp {
-                Err(e) => { last_err = format!("Network error: {e}"); }
+                Err(e) => { last_err = format!("Network error: {e}"); continue; }
                 Ok(r) => {
                     let status = r.status();
                     // Retry on 404 (LiteLLM routing flake) and 5xx
@@ -150,7 +161,7 @@ pub async fn llm_summarize(
         match result {
             Some(r) => r,
             None => {
-                let _ = app.emit("llm_error", &last_err);
+                let _ = app.emit("llm_error", LlmEvent { id: request_id.clone(), text: last_err.clone() });
                 return Err(last_err);
             }
         }
@@ -160,7 +171,7 @@ pub async fn llm_summarize(
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
         let msg = format!("LLM API error {status}: {body}");
-        let _ = app.emit("llm_error", &msg);
+        let _ = app.emit("llm_error", LlmEvent { id: request_id.clone(), text: msg.clone() });
         return Err(msg);
     }
 
@@ -179,19 +190,19 @@ pub async fn llm_summarize(
 
             if let Some(data) = line.strip_prefix("data: ") {
                 if data == "[DONE]" {
-                    let _ = app.emit("llm_done", &full);
+                    let _ = app.emit("llm_done", LlmEvent { id: request_id.clone(), text: full.clone() });
                     return Ok(());
                 }
                 if let Ok(val) = serde_json::from_str::<serde_json::Value>(data) {
                     if let Some(token) = val["choices"][0]["delta"]["content"].as_str() {
                         full.push_str(token);
-                        let _ = app.emit("llm_token", token);
+                        let _ = app.emit("llm_token", LlmEvent { id: request_id.clone(), text: token.to_string() });
                     }
                 }
             }
         }
     }
 
-    let _ = app.emit("llm_done", &full);
+    let _ = app.emit("llm_done", LlmEvent { id: request_id, text: full });
     Ok(())
 }

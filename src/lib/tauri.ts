@@ -73,24 +73,37 @@ export const saveLlmOutput = (
 
 export const llmSummarize = (
   abstractText: string,
-  instruction: string
+  instruction: string,
+  requestId: string,
 ): Promise<void> =>
-  invoke("llm_summarize", { abstractText, instruction });
+  invoke("llm_summarize", { abstractText, instruction, requestId });
 
-export const onLlmToken = (cb: (token: string) => void): Promise<UnlistenFn> =>
-  listen<string>("llm_token", (e) => cb(e.payload));
+interface LlmEventPayload { id: string; text: string }
 
-export const onLlmDone = (cb: (full: string) => void): Promise<UnlistenFn> =>
-  listen<string>("llm_done", (e) => cb(e.payload));
+/** Listen only for events matching `requestId`. */
+export const onLlmToken = (requestId: string, cb: (token: string) => void): Promise<UnlistenFn> =>
+  listen<LlmEventPayload>("llm_token", (e) => {
+    if (e.payload.id === requestId) cb(e.payload.text);
+  });
 
-export const onLlmError = (cb: (msg: string) => void): Promise<UnlistenFn> =>
-  listen<string>("llm_error", (e) => cb(e.payload));
+export const onLlmDone = (requestId: string, cb: (full: string) => void): Promise<UnlistenFn> =>
+  listen<LlmEventPayload>("llm_done", (e) => {
+    if (e.payload.id === requestId) cb(e.payload.text);
+  });
+
+export const onLlmError = (requestId: string, cb: (msg: string) => void): Promise<UnlistenFn> =>
+  listen<LlmEventPayload>("llm_error", (e) => {
+    if (e.payload.id === requestId) cb(e.payload.text);
+  });
 
 // ── viewer ────────────────────────────────────────────────────────────────────
 export interface ViewerItem { url: string; title: string }
 
 export const openViewer = (url: string, title: string): Promise<void> =>
   invoke("open_viewer", { url, title });
+
+export const navigateContent = (url: string): Promise<void> =>
+  invoke("navigate_content", { url });
 
 export const popViewerQueue = (): Promise<ViewerItem[]> =>
   invoke("pop_viewer_queue");
