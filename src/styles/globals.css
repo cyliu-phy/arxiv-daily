@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ─────────────────────────────────────────────────────────── */
+@layer base {
+
+  /* Light mode — warm ivory paper with ink typography */
+  :root {
+    --background:          40 30% 97%;
+    --foreground:          225 30% 12%;
+    --surface:             40 20% 95%;
+    --card:                0  0% 100%;
+    --card-hover:          40 15% 99%;
+    --card-foreground:     225 30% 12%;
+    --muted:               40 20% 93%;
+    --muted-foreground:    220 12% 48%;
+    --primary:             38 80% 44%;   /* amber-gold */
+    --primary-foreground:  38 80% 8%;
+    --secondary:           40 15% 91%;
+    --secondary-foreground:220 20% 25%;
+    --accent:              40 15% 91%;
+    --accent-foreground:   225 25% 20%;
+    --destructive:         0  72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border:              40 18% 86%;
+    --input:               40 18% 86%;
+    --ring:                38 80% 44%;
+    --shadow:              225 30% 15%;
+    --radius:              0.6rem;
+  }
+
+  /* Dark mode — deep ink-navy with amber accents */
+  .dark {
+    --background:          226 35% 6%;
+    --foreground:          40  20% 90%;
+    --surface:             226 30% 8%;
+    --card:                226 28% 9%;
+    --card-hover:          226 26% 11%;
+    --card-foreground:     40  20% 90%;
+    --muted:               226 24% 13%;
+    --muted-foreground:    220 15% 52%;
+    --primary:             38  82% 60%;  /* warm gold */
+    --primary-foreground:  38  82% 8%;
+    --secondary:           226 24% 14%;
+    --secondary-foreground:40  20% 88%;
+    --accent:              226 24% 14%;
+    --accent-foreground:   40  20% 90%;
+    --destructive:         0   58% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border:              226 22% 16%;
+    --input:               226 22% 16%;
+    --ring:                38  82% 60%;
+    --shadow:              226 50% 2%;
+    --radius:              0.6rem;
+  }
+}
+
+/* ── Base resets ────────────────────────────────────────────────────────────── */
+@layer base {
+  * { @apply border-border; }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1, "kern" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Article title serif */
+  .font-display {
+    font-family: "Crimson Pro", Georgia, ui-serif, serif;
+    font-feature-settings: "liga" 1, "onum" 1;
+  }
+
+  /* Metadata mono */
+  .font-mono {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-feature-settings: "calt" 1;
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar       { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+    border: 1px solid transparent;
+  }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-muted-foreground/25; }
+}
+
+/* ── Utility classes ────────────────────────────────────────────────────────── */
+@layer utilities {
+
+  /* Subtle noise texture overlay for depth */
+  .noise-bg::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 128px 128px;
+    border-radius: inherit;
+    z-index: 0;
+  }
+
+  /* Gold glow ring — for focused inputs */
+  .ring-gold {
+    box-shadow: 0 0 0 2px hsl(var(--ring) / 0.3);
+    outline: none;
+  }
+
+  /* KaTeX overrides for better integration */
+  .katex { font-size: 1em !important; }
+  .katex-display { margin: 0.5em 0 !important; overflow-x: auto; }
+  .dark .katex { color: hsl(40, 20%, 90%); }
+}
