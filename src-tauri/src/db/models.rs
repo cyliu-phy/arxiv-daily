@@ -22,6 +22,13 @@ pub struct Settings {
     pub theme: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmOutput {
+    pub instruction: String,
+    pub output: String,
+    pub created_at: String,
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {

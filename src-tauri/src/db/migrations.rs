@@ -36,6 +36,14 @@ pub fn run(conn: &Connection) -> Result<()> {
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS llm_outputs (
+            article_id  TEXT NOT NULL,
+            instruction TEXT NOT NULL,
+            output      TEXT NOT NULL,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (article_id, instruction)
+        );
         ",
     )?;
 

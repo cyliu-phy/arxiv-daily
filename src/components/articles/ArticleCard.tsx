@@ -1,55 +1,105 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Star, ExternalLink, ChevronDown, ChevronUp,
-  Sparkles, Languages,
+  Sparkles, Languages, EyeOff, Eye,
 } from "lucide-react";
-import type { Article } from "@/lib/tauri";
+import type { Article, LlmOutput } from "@/lib/tauri";
 import {
   openExternal, llmSummarize,
   onLlmToken, onLlmDone, onLlmError,
+  getLlmOutputs, saveLlmOutput,
 } from "@/lib/tauri";
 import { useToggleFavorite } from "@/hooks/useFavorites";
 import { LatexText } from "./LatexText";
 import { formatDate, cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-interface Props {
-  article: Article;
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+function outputLabel(instruction: string): string {
+  if (instruction === "summarize") return "AI Summary";
+  const lang = instruction.match(/translate to (.+)/i)?.[1];
+  if (lang) return `Translation · ${lang}`;
+  return instruction;
 }
 
+// ── component ─────────────────────────────────────────────────────────────────
+
+interface Props { article: Article }
+
 export function ArticleCard({ article }: Props) {
-  const [expanded, setExpanded]     = useState(false);
-  const [llmOutput, setLlmOutput]   = useState<string | null>(null);
-  const [llmLoading, setLlmLoading] = useState(false);
+  const [expanded, setExpanded]         = useState(false);
+  const [cachedOutputs, setCachedOutputs] = useState<LlmOutput[]>([]);
+  // track which instructions are hidden (session-only, not persisted)
+  const [hidden, setHidden]             = useState<Set<string>>(new Set());
+  // instruction currently streaming (null = idle)
+  const [streaming, setStreaming]       = useState<{ instruction: string; text: string } | null>(null);
   const toggleFav = useToggleFavorite();
+
+  // Load cached outputs once on mount
+  useEffect(() => {
+    getLlmOutputs(article.id).then(setCachedOutputs).catch(() => {});
+  }, [article.id]);
+
+  const toggleHide = useCallback((instruction: string) => {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      next.has(instruction) ? next.delete(instruction) : next.add(instruction);
+      return next;
+    });
+  }, []);
+
+  const runLlm = async (instruction: string) => {
+    if (streaming) return;
+    setStreaming({ instruction, text: "" });
+    // un-hide this slot so the user sees the incoming stream
+    setHidden((prev) => { const next = new Set(prev); next.delete(instruction); return next; });
+
+    const unToken = await onLlmToken((tok) =>
+      setStreaming((s) => s ? { ...s, text: s.text + tok } : null)
+    );
+    const unDone = await onLlmDone(async (fullText) => {
+      unToken(); unDone();
+      try {
+        await saveLlmOutput(article.id, instruction, fullText);
+        const updated = await getLlmOutputs(article.id);
+        setCachedOutputs(updated);
+      } catch { /* non-fatal */ }
+      setStreaming(null);
+    });
+    const unErr = await onLlmError((msg) => {
+      toast.error(msg);
+      unToken(); unDone(); unErr();
+      setStreaming(null);
+    });
+
+    try {
+      await llmSummarize(article.abstract_text, instruction);
+    } catch {
+      setStreaming(null);
+    }
+  };
 
   const authorStr =
     article.authors.length > 3
       ? `${article.authors.slice(0, 3).join(", ")} +${article.authors.length - 3}`
       : article.authors.join(", ");
 
-  const runLlm = async (instruction: string) => {
-    if (llmLoading) return;
-    setLlmOutput("");
-    setLlmLoading(true);
-    setExpanded(true);
-
-    const unToken = await onLlmToken((tok) => setLlmOutput((p) => (p ?? "") + tok));
-    const unDone  = await onLlmDone(() => { setLlmLoading(false); unToken(); unDone(); });
-    const unErr   = await onLlmError((msg) => {
-      toast.error(msg);
-      setLlmLoading(false);
-      setLlmOutput(null);
-      unToken(); unDone(); unErr();
+  // Merge cached + any active stream into a single ordered list for display.
+  // If a stream is active for an instruction that already has a cached entry,
+  // the stream replaces it in that slot.
+  const displayOutputs: Array<{ instruction: string; text: string; isStreaming: boolean }> =
+    cachedOutputs.map((c) => {
+      if (streaming?.instruction === c.instruction) {
+        return { instruction: c.instruction, text: streaming.text, isStreaming: true };
+      }
+      return { instruction: c.instruction, text: c.output, isStreaming: false };
     });
 
-    try {
-      await llmSummarize(article.abstract_text, instruction);
-    } catch {
-      setLlmLoading(false);
-      setLlmOutput(null);
-    }
-  };
+  // If streaming a brand-new instruction (not yet cached), append it
+  if (streaming && !cachedOutputs.find((c) => c.instruction === streaming.instruction)) {
+    displayOutputs.push({ instruction: streaming.instruction, text: streaming.text, isStreaming: true });
+  }
 
   return (
     <article
@@ -60,17 +110,16 @@ export function ArticleCard({ article }: Props) {
         "animate-fade-in"
       )}
     >
-      {/* Gold left accent — appears on hover */}
+      {/* Gold left accent on hover */}
       <div className="absolute left-0 top-4 bottom-4 w-[3px] rounded-full bg-primary opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
 
-      {/* Top meta row */}
+      {/* Meta row */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <a
             onClick={(e) => { e.preventDefault(); openExternal(article.link); }}
             href={article.link}
             className="font-mono text-[10px] text-primary/60 hover:text-primary transition-colors cursor-pointer shrink-0"
-            title="Open on arXiv"
           >
             {article.id}
           </a>
@@ -84,13 +133,21 @@ export function ArticleCard({ article }: Props) {
           </span>
         </div>
 
-        {/* Action buttons — fade in on hover */}
+        {/* Action buttons */}
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 shrink-0">
-          <IconBtn onClick={() => runLlm("summarize")} title="AI summary">
-            <Sparkles size={12} />
+          <IconBtn
+            onClick={() => runLlm("summarize")}
+            title="AI summary"
+            active={!!streaming && streaming.instruction === "summarize"}
+          >
+            <Sparkles size={12} className={streaming?.instruction === "summarize" ? "animate-pulse" : ""} />
           </IconBtn>
-          <IconBtn onClick={() => runLlm("translate to Chinese")} title="Translate (ZH)">
-            <Languages size={12} />
+          <IconBtn
+            onClick={() => runLlm("translate to Chinese")}
+            title="Translate (ZH)"
+            active={!!streaming && streaming.instruction === "translate to Chinese"}
+          >
+            <Languages size={12} className={streaming?.instruction === "translate to Chinese" ? "animate-pulse" : ""} />
           </IconBtn>
           <IconBtn onClick={() => openExternal(article.link)} title="Open on arXiv">
             <ExternalLink size={12} />
@@ -114,7 +171,7 @@ export function ArticleCard({ article }: Props) {
         </div>
       </div>
 
-      {/* Title — Crimson Pro serif */}
+      {/* Title */}
       <h3 className="font-display text-[17px] font-medium leading-snug text-foreground mb-1.5 line-clamp-2">
         <LatexText text={article.title} />
       </h3>
@@ -126,61 +183,92 @@ export function ArticleCard({ article }: Props) {
         </p>
       )}
 
-      {/* Abstract — collapsible */}
+      {/* Abstract */}
       <div>
-        <div
-          className={cn(
-            "text-[13px] leading-relaxed text-muted-foreground",
-            !expanded && "line-clamp-3"
-          )}
-        >
+        <div className={cn(
+          "text-[13px] leading-relaxed text-muted-foreground",
+          !expanded && "line-clamp-3"
+        )}>
           <LatexText text={article.abstract_text} />
         </div>
         <button
           onClick={() => setExpanded((v) => !v)}
           className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-primary/60 hover:text-primary transition-colors font-medium"
         >
-          {expanded ? (
-            <><ChevronUp size={11} strokeWidth={2.5} /> Less</>
-          ) : (
-            <><ChevronDown size={11} strokeWidth={2.5} /> More</>
-          )}
+          {expanded
+            ? <><ChevronUp size={11} strokeWidth={2.5} /> Less</>
+            : <><ChevronDown size={11} strokeWidth={2.5} /> More</>}
         </button>
       </div>
 
-      {/* LLM panel */}
-      {(llmOutput !== null || llmLoading) && (
-        <div className="mt-4 rounded-lg bg-primary/5 border border-primary/15 p-3.5">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Sparkles size={10} className="text-primary/60" />
-            <span className="font-mono text-[10px] uppercase tracking-widest text-primary/60 font-medium">
-              {llmLoading ? "generating…" : "AI output"}
-            </span>
-          </div>
-          <p className="text-[12.5px] leading-relaxed text-foreground/85 whitespace-pre-wrap font-sans">
-            {llmOutput}
-            {llmLoading && (
-              <span className="inline-block w-1.5 h-3.5 bg-primary/50 ml-0.5 animate-pulse rounded-sm" />
+      {/* ── Pinned LLM outputs ─────────────────────────────────────────────── */}
+      {displayOutputs.map(({ instruction, text, isStreaming }) => {
+        const isHidden = hidden.has(instruction);
+        return (
+          <div
+            key={instruction}
+            className="mt-3 rounded-lg border border-primary/15 bg-primary/5 overflow-hidden"
+          >
+            {/* Output header */}
+            <div className="flex items-center justify-between px-3.5 py-2 border-b border-primary/10">
+              <div className="flex items-center gap-1.5">
+                <Sparkles size={10} className={cn("text-primary/50", isStreaming && "animate-pulse")} />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-primary/60 font-medium">
+                  {outputLabel(instruction)}
+                </span>
+                {isStreaming && (
+                  <span className="font-mono text-[9px] text-primary/40 animate-pulse">
+                    generating…
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => toggleHide(instruction)}
+                title={isHidden ? "Show" : "Hide"}
+                className="flex items-center gap-1 text-[10px] text-muted-foreground/40 hover:text-muted-foreground transition-colors font-medium"
+              >
+                {isHidden
+                  ? <><Eye size={10} /> Show</>
+                  : <><EyeOff size={10} /> Hide</>}
+              </button>
+            </div>
+
+            {/* Output body */}
+            {!isHidden && (
+              <div className="px-3.5 py-2.5">
+                <p className="text-[12.5px] leading-relaxed text-foreground/85 whitespace-pre-wrap font-sans">
+                  {text}
+                  {isStreaming && (
+                    <span className="inline-block w-1.5 h-3.5 bg-primary/50 ml-0.5 animate-pulse rounded-sm align-text-bottom" />
+                  )}
+                </p>
+              </div>
             )}
-          </p>
-        </div>
-      )}
+          </div>
+        );
+      })}
     </article>
   );
 }
 
 function IconBtn({
-  children, onClick, title,
+  children, onClick, title, active,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   title?: string;
+  active?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       title={title}
-      className="h-6 w-6 flex items-center justify-center rounded-md text-muted-foreground/40 hover:text-accent-foreground hover:bg-accent transition-all duration-100"
+      className={cn(
+        "h-6 w-6 flex items-center justify-center rounded-md transition-all duration-100",
+        active
+          ? "text-primary bg-primary/10"
+          : "text-muted-foreground/40 hover:text-accent-foreground hover:bg-accent"
+      )}
     >
       {children}
     </button>

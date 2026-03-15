@@ -46,6 +46,8 @@ pub fn run() {
             commands::favorites::toggle_favorite,
             commands::favorites::get_favorites,
             commands::llm::llm_summarize,
+            commands::llm::get_llm_outputs,
+            commands::llm::save_llm_output,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

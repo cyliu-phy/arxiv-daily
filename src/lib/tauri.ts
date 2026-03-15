@@ -2,6 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-shell";
 
+export interface LlmOutput {
+  instruction: string;
+  output: string;
+  created_at: string;
+}
+
 export interface Article {
   id: string;
   category: string;
@@ -56,6 +62,15 @@ export const getFavorites = (): Promise<Article[]> =>
   invoke("get_favorites");
 
 // ── LLM ──────────────────────────────────────────────────────────────────────
+export const getLlmOutputs = (articleId: string): Promise<LlmOutput[]> =>
+  invoke("get_llm_outputs", { articleId });
+
+export const saveLlmOutput = (
+  articleId: string,
+  instruction: string,
+  output: string
+): Promise<void> => invoke("save_llm_output", { articleId, instruction, output });
+
 export const llmSummarize = (
   abstractText: string,
   instruction: string

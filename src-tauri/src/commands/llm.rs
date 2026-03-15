@@ -1,7 +1,57 @@
+use crate::db::models::LlmOutput;
 use crate::db::DbState;
 use crate::db::get_setting;
 use serde_json::json;
 use tauri::Emitter;
+
+/// Return all cached LLM outputs for an article.
+#[tauri::command]
+pub fn get_llm_outputs(
+    state: tauri::State<'_, DbState>,
+    article_id: String,
+) -> Result<Vec<LlmOutput>, String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT instruction, output, created_at
+             FROM llm_outputs WHERE article_id = ?1
+             ORDER BY created_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let result: Vec<LlmOutput> = stmt
+        .query_map(rusqlite::params![article_id], |row| {
+            Ok(LlmOutput {
+                instruction: row.get(0)?,
+                output: row.get(1)?,
+                created_at: row.get(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
+/// Persist (upsert) a completed LLM output for an article.
+#[tauri::command]
+pub fn save_llm_output(
+    state: tauri::State<'_, DbState>,
+    article_id: String,
+    instruction: String,
+    output: String,
+) -> Result<(), String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO llm_outputs(article_id, instruction, output)
+         VALUES(?1, ?2, ?3)
+         ON CONFLICT(article_id, instruction)
+         DO UPDATE SET output=excluded.output, created_at=datetime('now')",
+        rusqlite::params![article_id, instruction, output],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
 
 /// Calls the OpenAI-compatible chat completions endpoint, streams tokens
 /// back to the frontend via Tauri events.
