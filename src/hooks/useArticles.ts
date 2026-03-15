@@ -38,8 +38,9 @@ export function useFetchFeed() {
       queryClient.invalidateQueries({ queryKey: ["articles", category] });
       toast.success(`Synced ${category}`);
     },
-    onError: (err: Error) => {
-      toast.error(`Sync failed: ${err.message}`);
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Sync failed: ${msg}`);
     },
   });
 }

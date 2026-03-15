@@ -86,5 +86,17 @@ export const onLlmDone = (cb: (full: string) => void): Promise<UnlistenFn> =>
 export const onLlmError = (cb: (msg: string) => void): Promise<UnlistenFn> =>
   listen<string>("llm_error", (e) => cb(e.payload));
 
+// ── viewer ────────────────────────────────────────────────────────────────────
+export interface ViewerItem { url: string; title: string }
+
+export const openViewer = (url: string, title: string): Promise<void> =>
+  invoke("open_viewer", { url, title });
+
+export const popViewerQueue = (): Promise<ViewerItem[]> =>
+  invoke("pop_viewer_queue");
+
+export const checkHtmlAvailable = (arxivId: string): Promise<boolean> =>
+  invoke("check_html_available", { arxivId });
+
 // ── shell ─────────────────────────────────────────────────────────────────────
 export const openExternal = (url: string): Promise<void> => open(url);

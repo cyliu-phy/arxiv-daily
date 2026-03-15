@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Star, ExternalLink, ChevronDown, ChevronUp,
-  Sparkles, Languages, EyeOff, Eye,
+  Languages, EyeOff, Eye, FileText, Globe, Sparkles,
 } from "lucide-react";
 import type { Article, LlmOutput } from "@/lib/tauri";
 import {
   openExternal, llmSummarize,
   onLlmToken, onLlmDone, onLlmError,
   getLlmOutputs, saveLlmOutput,
+  openViewer, checkHtmlAvailable,
 } from "@/lib/tauri";
 import { useToggleFavorite } from "@/hooks/useFavorites";
 import { LatexText } from "./LatexText";
@@ -36,9 +37,16 @@ export function ArticleCard({ article }: Props) {
   const [streaming, setStreaming]       = useState<{ instruction: string; text: string } | null>(null);
   const toggleFav = useToggleFavorite();
 
+  const [htmlAvailable, setHtmlAvailable] = useState<boolean | null>(null);
+
   // Load cached outputs once on mount
   useEffect(() => {
     getLlmOutputs(article.id).then(setCachedOutputs).catch(() => {});
+  }, [article.id]);
+
+  // Check HTML availability once on mount
+  useEffect(() => {
+    checkHtmlAvailable(article.id).then(setHtmlAvailable).catch(() => setHtmlAvailable(false));
   }, [article.id]);
 
   const toggleHide = useCallback((instruction: string) => {
@@ -58,8 +66,9 @@ export function ArticleCard({ article }: Props) {
     const unToken = await onLlmToken((tok) =>
       setStreaming((s) => s ? { ...s, text: s.text + tok } : null)
     );
+    const cleanup = () => { unToken(); unDone(); unErr(); };
     const unDone = await onLlmDone(async (fullText) => {
-      unToken(); unDone();
+      cleanup();
       try {
         await saveLlmOutput(article.id, instruction, fullText);
         const updated = await getLlmOutputs(article.id);
@@ -69,7 +78,7 @@ export function ArticleCard({ article }: Props) {
     });
     const unErr = await onLlmError((msg) => {
       toast.error(msg);
-      unToken(); unDone(); unErr();
+      cleanup();
       setStreaming(null);
     });
 
@@ -136,19 +145,26 @@ export function ArticleCard({ article }: Props) {
         {/* Action buttons */}
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 shrink-0">
           <IconBtn
-            onClick={() => runLlm("summarize")}
-            title="AI summary"
-            active={!!streaming && streaming.instruction === "summarize"}
-          >
-            <Sparkles size={12} className={streaming?.instruction === "summarize" ? "animate-pulse" : ""} />
-          </IconBtn>
-          <IconBtn
             onClick={() => runLlm("translate to Chinese")}
             title="Translate (ZH)"
             active={!!streaming && streaming.instruction === "translate to Chinese"}
           >
             <Languages size={12} className={streaming?.instruction === "translate to Chinese" ? "animate-pulse" : ""} />
           </IconBtn>
+          <IconBtn
+            onClick={() => openViewer(`https://arxiv.org/pdf/${article.id}`, `PDF · ${article.id}`)}
+            title="View PDF"
+          >
+            <FileText size={12} />
+          </IconBtn>
+          {htmlAvailable && (
+            <IconBtn
+              onClick={() => openViewer(`https://arxiv.org/html/${article.id}`, `HTML · ${article.id}`)}
+              title="View HTML"
+            >
+              <Globe size={12} />
+            </IconBtn>
+          )}
           <IconBtn onClick={() => openExternal(article.link)} title="Open on arXiv">
             <ExternalLink size={12} />
           </IconBtn>

@@ -6,6 +6,16 @@ use db::DbState;
 use std::sync::Mutex;
 use tauri::Manager;
 
+/// A single paper to open in the viewer window.
+#[derive(Clone, serde::Serialize)]
+pub struct ViewerItem {
+    pub url: String,
+    pub title: String,
+}
+
+/// Shared queue of items waiting for the viewer window to mount.
+pub struct ViewerQueue(pub Mutex<Vec<ViewerItem>>);
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -33,6 +43,9 @@ pub fn run() {
                 .expect("Failed to build HTTP client");
             app.manage(http);
 
+            // Queue for viewer window tab items
+            app.manage(ViewerQueue(Mutex::new(Vec::new())));
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -48,6 +61,9 @@ pub fn run() {
             commands::llm::llm_summarize,
             commands::llm::get_llm_outputs,
             commands::llm::save_llm_output,
+            commands::viewer::open_viewer,
+            commands::viewer::pop_viewer_queue,
+            commands::viewer::check_html_available,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

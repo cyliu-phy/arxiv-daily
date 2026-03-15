@@ -109,18 +109,52 @@ pub async fn llm_summarize(
         "temperature": 0.3
     });
 
-    let response = http
-        .post(&url)
-        .header("Authorization", format!("Bearer {api_key}"))
-        .header("Content-Type", "application/json")
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| {
-            let msg = format!("Network error: {e}");
-            let _ = app.emit("llm_error", &msg);
-            msg
-        })?;
+    // Retry up to 3 times on transient errors (404 from LiteLLM load-balancer
+    // routing failures, 429 rate-limit back-off, 5xx).
+    let response = {
+        const MAX_TRIES: u32 = 3;
+        let mut last_err = String::new();
+        let mut result = None;
+
+        for attempt in 0..MAX_TRIES {
+            if attempt > 0 {
+                // Brief back-off: 600 ms × attempt
+                tokio::time::sleep(std::time::Duration::from_millis(600 * attempt as u64)).await;
+            }
+
+            let resp = http
+                .post(&url)
+                .header("Authorization", format!("Bearer {api_key}"))
+                .header("Content-Type", "application/json")
+                .json(&payload)
+                .send()
+                .await;
+
+            match resp {
+                Err(e) => { last_err = format!("Network error: {e}"); }
+                Ok(r) => {
+                    let status = r.status();
+                    // Retry on 404 (LiteLLM routing flake) and 5xx
+                    if (status.as_u16() == 404 || status.is_server_error())
+                        && attempt + 1 < MAX_TRIES
+                    {
+                        last_err = format!("HTTP {status} (retrying…)");
+                        continue;
+                    }
+                    result = Some(r);
+                    break;
+                }
+            }
+        }
+
+        match result {
+            Some(r) => r,
+            None => {
+                let _ = app.emit("llm_error", &last_err);
+                return Err(last_err);
+            }
+        }
+    };
 
     if !response.status().is_success() {
         let status = response.status();
