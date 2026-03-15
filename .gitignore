@@ -4,3 +4,9 @@ src-tauri/target/
 src-tauri/gen/
 .env
 *.local
+*.AppImage
+*.deb
+*.rpm
+*.dmg
+*.msi
+*-setup.exe
