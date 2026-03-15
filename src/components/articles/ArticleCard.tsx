@@ -252,12 +252,17 @@ export function ArticleCard({ article }: Props) {
             {/* Output body */}
             {!isHidden && (
               <div className="px-3.5 py-2.5">
-                <p className="text-[12.5px] leading-relaxed text-foreground/85 whitespace-pre-wrap font-sans">
-                  {text}
-                  {isStreaming && (
+                {isStreaming ? (
+                  <p className="text-[12.5px] leading-relaxed text-foreground/85 whitespace-pre-wrap font-sans">
+                    {text}
                     <span className="inline-block w-1.5 h-3.5 bg-primary/50 ml-0.5 animate-pulse rounded-sm align-text-bottom" />
-                  )}
-                </p>
+                  </p>
+                ) : (
+                  <LatexText
+                    text={text}
+                    className="text-[12.5px] leading-relaxed text-foreground/85 whitespace-pre-wrap font-sans"
+                  />
+                )}
               </div>
             )}
           </div>
