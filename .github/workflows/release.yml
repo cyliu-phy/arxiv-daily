@@ -18,6 +18,7 @@ jobs:
             name: linux
           - os: macos-latest
             name: macos
+            args: '--target universal-apple-darwin'
           - os: windows-latest
             name: windows
 
@@ -35,6 +36,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
@@ -61,6 +64,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          args: ${{ matrix.args }}
           tagName: ${{ github.ref_name }}
           releaseName: 'arXiv Daily ${{ github.ref_name }}'
           releaseBody: |
