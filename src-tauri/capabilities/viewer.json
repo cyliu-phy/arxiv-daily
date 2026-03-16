@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "viewer",
-  "description": "Capabilities for the viewer tab-bar webview",
-  "windows": ["viewer-tabs"],
+  "description": "Capabilities for per-paper viewer windows",
+  "windows": ["pdf-*", "html-*", "viewer-*"],
   "permissions": [
     "core:default"
   ]

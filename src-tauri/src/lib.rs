@@ -6,16 +6,6 @@ use db::DbState;
 use std::sync::Mutex;
 use tauri::Manager;
 
-/// A single paper to open in the viewer window.
-#[derive(Clone, serde::Serialize)]
-pub struct ViewerItem {
-    pub url: String,
-    pub title: String,
-}
-
-/// Shared queue of items waiting for the viewer window to mount.
-pub struct ViewerQueue(pub Mutex<Vec<ViewerItem>>);
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -27,7 +17,6 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            // Open (or create) the SQLite database in the app data directory
             let data_dir = app
                 .path()
                 .app_data_dir()
@@ -36,15 +25,11 @@ pub fn run() {
             let conn = db::open(&data_dir).expect("Failed to open database");
             app.manage(DbState(Mutex::new(conn)));
 
-            // Shared HTTP client (connection pooling)
             let http = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
                 .build()
                 .expect("Failed to build HTTP client");
             app.manage(http);
-
-            // Queue for viewer window tab items
-            app.manage(ViewerQueue(Mutex::new(Vec::new())));
 
             Ok(())
         })
@@ -62,8 +47,6 @@ pub fn run() {
             commands::llm::get_llm_outputs,
             commands::llm::save_llm_output,
             commands::viewer::open_viewer,
-            commands::viewer::navigate_content,
-            commands::viewer::pop_viewer_queue,
             commands::viewer::check_html_available,
         ])
         .run(tauri::generate_context!())

@@ -97,16 +97,8 @@ export const onLlmError = (requestId: string, cb: (msg: string) => void): Promis
   });
 
 // ── viewer ────────────────────────────────────────────────────────────────────
-export interface ViewerItem { url: string; title: string }
-
 export const openViewer = (url: string, title: string): Promise<void> =>
   invoke("open_viewer", { url, title });
-
-export const navigateContent = (url: string): Promise<void> =>
-  invoke("navigate_content", { url });
-
-export const popViewerQueue = (): Promise<ViewerItem[]> =>
-  invoke("pop_viewer_queue");
 
 export const checkHtmlAvailable = (arxivId: string): Promise<boolean> =>
   invoke("check_html_available", { arxivId });
